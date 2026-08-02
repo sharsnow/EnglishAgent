@@ -29,7 +29,7 @@ EnglishAgent 的核心目標，是把英文學習、教材查詢、對話式回�
 
 ### 3.1 架構概觀
 
-EnglishAgent 的雲端架構可以分成五個主要層次：
+EnglishAgent 的雲端架構可分成五個主要層次：
 
 1. 使用者存取層
 2. 前端與應用層
@@ -46,7 +46,7 @@ User -> ALB -> EC2 / Flask Backend -> Master Agent -> RAG / Bedrock -> Response 
 ### 3.2 使用者存取層
 
 使用者會先透過 Application Load Balancer 的 DNS URL 進入系統。  
-從畫面上可以看到，登入頁直接對外提供存取入口，代表實際服務已經透過 ALB 做公開暴露，而不是直接將 EC2 對外開放。
+登入頁直接對外提供存取入口，代表實際服務是透過 ALB 做公開暴露，而不是直接將 EC2 對外開放。
 
 這樣做的好處是：
 
@@ -55,59 +55,42 @@ User -> ALB -> EC2 / Flask Backend -> Master Agent -> RAG / Bedrock -> Response 
 - 提升安全性與維護彈性
 - 可以搭配憑證與健康檢查機制
 
-### 3.3 前端與應用層
+### 3.3 雲端架構圖
 
-目前專案前端以 HTML + JavaScript 為主，後端則以 Flask RESTful API 提供服務。  
-使用者登入後會進入聊天頁面，左側是功能選單，中央是對話內容區，底部是輸入框。
+![系統架構](assets/figure_01_architecture.png)
 
-應用層的職責包括：
+這張圖是整體架構總覽，可以看到使用者先經過 ALB 進入系統，流量再進到 VPC 內的 EC2 與 Flask 後端。  
+圖中也標示了 Bedrock、S3、RDS 與 ChromaDB 的關係，說明 EnglishAgent 不是單一聊天頁面，而是一套完整的雲端應用：
 
-- 驗證使用者身份
-- 接收使用者輸入
-- 轉送請求給 AI / RAG 模組
-- 呈現回覆與學習內容
-- 顯示歷史訊息與教學分類
+- 前端負責接收操作
+- 後端負責流程控制
+- Bedrock 負責 AI 推理
+- S3 提供教材來源
+- RDS 儲存狀態與歷史
+- ChromaDB 支援 RAG 檢索
 
-### 3.4 AI / RAG 推論層
+### 3.4 雲端堆疊圖
 
-AI 層是 EnglishAgent 的核心。  
-專案中使用 Amazon Bedrock 作為模型存取入口，搭配不同模型處理不同任務：
+![雲端堆疊](assets/figure_02_cloud_stack.png)
 
-- Claude 3.5 Sonnet：負責較深度的推理與教學回覆
-- Claude 3 Haiku：負責較快速的反應與輕量任務
-- Titan Embeddings V2：負責將教材轉成向量表示
+這張圖把系統拆成幾個層級來看：
 
-推論層採用 Master-Sub Agent 或任務分工概念，把使用者問題拆成：
+- User Access
+- Frontend
+- Application Tier
+- Data Tier
+- Security & Integration
+- DevOps
 
-- 意圖判斷
-- 內容檢索
-- 教學整理
-- 最終回覆生成
+它特別說明了：
 
-### 3.5 資料與儲存層
-
-專案在資料面主要使用以下元件：
-
-| 元件 | 用途 |
-|---|---|
-| Amazon S3 | 儲存 PDF 教材、靜態資源與原始知識來源。 |
-| Amazon RDS (MySQL) | 儲存使用者、聊天歷史與系統狀態資料。 |
-| ChromaDB | 儲存向量索引，供 RAG 檢索使用。 |
-
-這個設計的好處是把「原始文件」、「結構化資料」與「向量知識」分開管理，避免所有資料都塞在同一層，方便日後擴充與維護。
-
-### 3.6 安全與維運層
-
-雲端架構還包含多個基礎安全元件：
-
-- VPC：建立網路隔離邊界
-- Security Group：限制服務間的連線
-- IAM Role：讓 EC2 以角色方式存取 Bedrock、S3 等 AWS 服務
-- Secrets Manager：可用於保管密碼或 API 金鑰
-- Auto Scaling Group：依流量調整執行個體數量
-- GitHub：作為版本控管與部署流程的一部分
-
-這些元件讓系統不只是能跑，也能在實際環境中持續運作。
+- 前端目前是 HTML + JavaScript
+- 後端是 Flask RESTful API
+- S3 可作為靜態資源與教材儲存位置
+- ALB 是 API 的統一入口
+- ASG 會依 CPU 或負載進行擴縮
+- RDS 作為結構化資料儲存
+- IAM、Security Group、VPC、Secrets Manager 負責安全與整合
 
 ## 4. 架構元件說明
 
@@ -124,6 +107,18 @@ AI 層是 EnglishAgent 的核心。
 | IAM / Security Group | 控制 AWS 資源權限與網路存取。 |
 | Secrets Manager | 儲存敏感設定，避免硬編碼。 |
 
+### 4.1 圖說補充
+
+![Multi-AZ 與目標群組](assets/figure_06_multi_az.png)
+
+這張圖是 AWS 負載平衡與健康檢查畫面，顯示目標群組中的實例狀態為 Healthy，代表部署具備可用性與容錯能力。  
+它說明 EnglishAgent 不是單機部署，而是採用可擴充、可監控的方式運作。搭配 Multi-AZ 或 ASG 設計後，當某一台 EC2 故障時，流量可以自動導向其他健康節點。
+
+![心智圖](assets/figure_07_mind_map.png)
+
+這張圖整理了 EnglishAgent Cloud 的完整概念，從 AWS、Web、Database、Core Agent、AI 與 RAG 六個方向收斂整個專案。  
+它很適合作為專案總結圖，因為把整個系統的範圍一次收斂清楚。
+
 ## 5. 資料流程
 
 ### 5.1 使用者進入系統
@@ -132,7 +127,19 @@ AI 層是 EnglishAgent 的核心。
 2. 進入登入頁面，輸入帳號密碼。
 3. 驗證完成後，導向聊天主頁。
 
-### 5.2 互動與推論流程
+### 5.2 登入與聊天畫面
+
+![登入畫面](assets/figure_03_login.png)
+
+這是系統的入口頁，使用者透過 ALB 的 DNS URL 進入登入介面，輸入 StudentID 與 Password 後再進入主系統。  
+它代表服務是透過雲端公開入口提供，而不是直接把後端裸露在外。
+
+![聊天畫面](assets/figure_04_chat.png)
+
+這張圖展示 EnglishAgent 的主要互動介面，包含功能選單、對話區與輸入框，並顯示歷史訊息由 RDS 讀取。  
+它說明前端只是入口，真正的互動資料與歷史狀態會回到後端與資料庫管理。
+
+### 5.3 互動與推論流程
 
 1. 使用者輸入英文學習需求或問題。
 2. Flask 後端接收請求並解析意圖。
@@ -141,8 +148,6 @@ AI 層是 EnglishAgent 的核心。
 5. ChromaDB 找出與問題最相關的教材片段。
 6. Bedrock 上的 LLM 根據檢索結果產生回答。
 7. 回答與學習歷程寫回 RDS。
-
-### 5.3 簡化流程圖
 
 ```text
 User
@@ -202,132 +207,20 @@ EnglishAgent 的知識來源主要包含：
 5. 使用者提問時，先做語意檢索。
 6. 將檢索到的內容交給 LLM 生成最終答案。
 
-### 7.3 RAG 的價值
-
-RAG 的目的不是單純讓 AI「自己回答」，而是讓 AI 先參考專案知識再回答。  
-這能提升：
-
-- 正確性
-- 可追溯性
-- 教材一致性
-- 對 PDF 文件內容的對應能力
-
-## 8. 7 張圖說明
-
-以下 7 張圖對應的是專案報告與雲端架構的核心內容。
-
-### 8.1 系統架構圖
-
-![系統架構](assets/figure_01_architecture.png)
-
-這張圖是整體架構總覽。可以看到使用者先經過 ALB 進入系統，流量再進到 VPC 內的 EC2 與 Flask 後端。  
-圖中也標示了 Bedrock、S3、RDS 與 ChromaDB 的關係，說明 EnglishAgent 不是單一聊天頁面，而是一套完整的雲端應用：
-
-- 前端負責接收操作
-- 後端負責流程控制
-- Bedrock 負責 AI 推理
-- S3 提供教材來源
-- RDS 儲存狀態與歷史
-- ChromaDB 支援 RAG 檢索
-
-### 8.2 雲端堆疊圖
-
-![雲端堆疊](assets/figure_02_cloud_stack.png)
-
-這張圖把系統拆成幾個層級來看：
-
-- User Access
-- Frontend
-- Application Tier
-- Data Tier
-- Security & Integration
-- DevOps
-
-它特別說明了：
-
-- 前端目前是 HTML + JavaScript
-- 後端是 Flask RESTful API
-- S3 可作為靜態資源與教材儲存位置
-- ALB 是 API 統一入口
-- ASG 會依 CPU 或負載進行擴縮
-- RDS 作為結構化資料儲存
-- IAM、Security Group、VPC、Secrets Manager 則負責安全與整合
-
-### 8.3 登入畫面
-
-![登入畫面](assets/figure_03_login.png)
-
-這張圖是系統的入口頁。使用者會透過 ALB 的 DNS URL 進入登入介面，輸入 StudentID 與 Password 後再進入主系統。  
-它代表：
-
-- 服務是透過雲端公開入口提供
-- 前端有基本的身份驗證流程
-- 系統不是直接開放後台，而是先經過登入入口
-
-### 8.4 聊天主畫面
-
-![聊天主畫面](assets/figure_04_chat.png)
-
-這張圖展示 EnglishAgent 的主要互動介面：
-
-- 左側是功能選單
-- 中間是對話內容
-- 底部是使用者輸入框
-- 左下角顯示使用者資訊
-
-畫面上也可看到歷史訊息是從 Amazon RDS 即時讀取，這表示聊天內容與使用者狀態並非只存在前端，而是有後端資料庫支援。
-
-### 8.5 RAG 對話畫面
+### 7.3 RAG 對話圖
 
 ![RAG 對話](assets/figure_05_rag_chat.png)
 
-這張圖是 RAG 的實際應用示意。當使用者提出英文學習問題時，系統會先從 ChromaDB 取回與教材相關的向量片段，再把這些內容交給 Claude 類模型生成回覆。
+這張圖說明 RAG 的實際應用，系統先從 ChromaDB 找出教材片段，再交給 Claude 生成更準確的回答。  
+圖中的重點也說明了：
 
-圖中也強調了這個流程：
+- Titan Embeddings 負責向量化
+- ChromaDB 負責語意檢索
+- Claude 3.5 Sonnet / Claude 3 Haiku 負責生成回覆
 
-- Titan Embeddings 用於建立向量
-- ChromaDB 用於檢索
-- Claude 3.5 Sonnet / Claude 3 Haiku 用於產生回答
+RAG 的目的不是單純讓 AI 自己回答，而是讓 AI 先參考專案知識再回答，這能提升正確性、可追溯性、教材一致性與對 PDF 文件內容的對應能力。
 
-這是 EnglishAgent 最重要的教學能力之一，因為它讓回答更貼近教材內容，而不是純粹的自由生成。
-
-### 8.6 Multi-AZ 與目標群組畫面
-
-![Multi-AZ 架構](assets/figure_06_multi_az.png)
-
-這張圖是 AWS 負載平衡與健康檢查的管理畫面，重點在於：
-
-- Target Group 目前註冊了可運作的後端實例
-- 健康狀態為 Healthy
-- 目標埠號是 5000
-- 區域顯示在 ap-southeast-1 類型的環境中
-
-這代表 EnglishAgent 不只是單機部署，而是採用可擴充、可監控的方式運作。  
-搭配 Multi-AZ 或 ASG 設計後，當某一台 EC2 故障時，流量可以自動導向其他健康節點。
-
-### 8.7 心智圖
-
-![心智圖](assets/figure_07_mind_map.png)
-
-這張圖整理了 EnglishAgent 的整體概念與功能區塊，從中心的 EnglishAgent Cloud 出發，延伸到：
-
-- AWS Cloud Infrastructure
-- Web Architecture
-- Database & Storage
-- Core Agent Roles
-- AI / LLM
-- RAG System
-
-它也把各層的細節拆出來，例如：
-
-- AWS 端包含 VPC、ALB、EC2、ASG、S3、RDS
-- AI 端包含 Claude、Titan Embeddings、Amazon Bedrock
-- 資料端包含 RDS、ChromaDB、S3
-- Web 端包含前端與 Flask API
-
-這張圖很適合作為專案總結頁，因為它把整個專案的技術範圍一次收斂到一張圖裡。
-
-## 9. 系統特色與限制
+## 8. 系統特色與限制
 
 | 項目 | 說明 |
 |---|---|
@@ -338,9 +231,9 @@ RAG 的目的不是單純讓 AI「自己回答」，而是讓 AI 先參考專案
 | 限制 | 模型回應速度會受推論與檢索流程影響。 |
 | 限制 | prompt 與 agent 路由需要持續調整才能穩定。 |
 
-## 10. 專案目錄與執行
+## 9. 專案目錄與執行
 
-### 10.1 常用目錄
+### 9.1 常用目錄
 
 | 目錄 | 說明 |
 |---|---|
@@ -348,14 +241,14 @@ RAG 的目的不是單純讓 AI「自己回答」，而是讓 AI 先參考專案
 | `assets/` | 圖片與簡報素材。 |
 | `README.md` | 專案說明文件。 |
 
-### 10.2 啟動方式
+### 9.2 啟動方式
 
 ```bash
 pip install -r requirements.txt
 python run.py
 ```
 
-### 10.3 AWS 部署提醒
+### 9.3 AWS 部署提醒
 
 - PDF 教材建議放在 Amazon S3 管理。
 - ALB 是對外入口，適合掛在前面做流量分配。
@@ -363,7 +256,7 @@ python run.py
 - RDS 建議搭配安全群組與私有網路。
 - ChromaDB 可作為 RAG 的向量資料庫。
 
-## 11. 後續維護建議
+## 10. 後續維護建議
 
 - 定期更新教材 PDF 與向量索引。
 - 監控 RDS、EC2、ALB 與 ASG 健康狀態。
